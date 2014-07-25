@@ -1,4 +1,3 @@
-package-editor-collaboration
-============================
+# Realtime collaboration in the editor
 
-Realtime collaboration inside the code editor
+This package extends the editor to add realtime collaboration.
