@@ -314,7 +314,7 @@ define([
                 socket.on('data', function(data) {
                     if (!self.isSync()) return;
 
-                    //logging.log("socket receive packet ", data);
+                    logging.log("socket receive packet ", data);
                     self.ping = true;
 
                     // Calid data
@@ -323,7 +323,7 @@ define([
                     }
 
                     // Changement file
-                    if (data.path && (!self.file || data.path != self.file.path())) {
+                    if (data.path && (!self.file || data.path != self.file.get("path"))) {
                         self.trigger("file:path", data.path);
                     }
 
