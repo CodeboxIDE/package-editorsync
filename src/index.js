@@ -11,7 +11,7 @@ define([
         run: function(args, editor) {
             // Turn off sync on this file
             if (editor.sync) {
-                editor.sync.stop();
+                editor.sync.close();
                 editor.sync = null;
                 return;
             }

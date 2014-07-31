@@ -776,9 +776,10 @@ define([
          */
         close: function() {
             clearInterval(this.timer);
-            //this.file.modifiedState(false);
             this.send("close");
             this.closeSocket();
+            this.trigger("close");
+            this.stopListening();
             this.off();
         },
 
@@ -920,7 +921,7 @@ define([
             // Clsoe tab when sync is over
             sync.on("close", function(mode) {
                 message.destroy();
-                editor.tab.closeTab();
+                editor.removeAllExt();
             });
 
             // handle error
@@ -939,7 +940,8 @@ define([
 
             // Start sync
             logging.log("start sync with file", editor.model);
-            sync.setFile(editor.model);
+
+            return sync.setFile(editor.model);
         }
     });
 
