@@ -16,9 +16,7 @@ define([
                 return;
             }
 
-            editor.sync = new FileSync({
-                file: editor.mode
-            });
+            editor.sync = new FileSync();
             editor.sync.bindEditor(editor);
         }
     });

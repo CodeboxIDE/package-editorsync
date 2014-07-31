@@ -280,14 +280,12 @@ define([
                 reset: false
             });
 
-            if (!envId) return this;
-            if (this.file.isNewfile() || !hr.Offline.isConnected()) options.sync = false;
             options.reset = options.sync? false : options.reset;
 
             this.envOptions = options
             this.envId = envId;
 
-            logging.log("update env with", this.envId, options, hr.Offline.isConnected());
+            logging.log("update env with", this.envId, options);
 
             this.content_value_t0 = this.content_value_t0 || "";
             this.content_value_t1 = this.content_value_t1 || "";
@@ -305,22 +303,15 @@ define([
             // Reset participants
             this.setParticipants([]);
 
+            logging.log("connecting to the backend");
             this.socket().then(function(socket) {
-                logging.log("creating socket");
-                socket.on('connect', function() {
-                    logging.log("socket connect");
-                });
-                socket.on('connect_failed', function() {
-                    logging.warn("socket connect failed");
-                });
-                socket.on('disconnect', function() {
+                logging.log("connected");
+
+                socket.on('close', function() {
                     logging.log("socket disconnect");
                     self.setSyncState(false);
                 });
-                socket.on('connecting', function() {
-                    logging.log("socket connecting ...");
-                });
-                socket.on('message', function(data) {
+                socket.on('data', function(data) {
                     if (!self.isSync()) return;
 
                     //logging.log("socket receive packet ", data);
@@ -376,11 +367,7 @@ define([
                     self.setSyncState(true);
                 });
 
-                if (self.file != null && !self.file.isNewfile()) {
-                    self.sendLoad(self.file.path());
-                } else {
-                    self.sendSync();
-                }
+                self.sendLoad(self.file.get("path"));
             });
         },
 
@@ -389,13 +376,13 @@ define([
          */
         setFile: function(file, options) {
             options = _.defaults({}, options || {}, {
-                sync: false,
+                sync: true,
                 reset: true,
                 autoload: true
             });
 
-            if (!file.isValid()) {
-                logging.error("invalid file for sync ", file);
+            if (file.isBuffer()) {
+                logging.error("can't do sync on buffer file", file);
                 return;
             }
 
@@ -408,14 +395,13 @@ define([
                 this.file.on("modified", this.trigger.bind(this, "sync:modified"));
                 this.file.on("loading", this.trigger.bind(this, "sync:loading"));
 
-                this.trigger("file:mode", this.file.mode());
                 if (options.autoload) {
                     this.on("file:path", function(path) {
-                        this.file.getByPath(path);
+                        this.file.stat(path);
                     }, this);
                 }
 
-                this.updateEnv(this.file.syncEnvId(), options);
+                this.updateEnv(this.file.get("path"), options);
             }
         },
 
@@ -425,11 +411,10 @@ define([
         socket: function() {
             var that = this, d = Q.defer();
 
-            var box = require("core/box");
-
             if (this._socket) return Q(this._socket);
 
-            if (this.envId != null) {
+            if (!this.envId) {
+                logging.error("no envId when creating socket");
                 return Q.reject(new Error("need 'envId' to create sync socket"))
             }
 
@@ -437,7 +422,7 @@ define([
                 service: "editorsync"
             });
 
-            this.socket.once("open", function() {
+            s.once("open", function() {
                 that._socket = s;
                 d.resolve(that._socket);
             });
@@ -673,14 +658,14 @@ define([
             if (this.envId != null && action != null) {
                 data = _.extend({}, data || {}, {
                     'action': action,
-                    'from': user.get("userId"),
-                    'token': user.get("token"),
+                    'from': "samy", //user.get("userId"),
+                    'token': "test", //user.get("token"),
                     'environment': this.envId
                 });
 
                 //logging.log("send packet", data);
                 this.socket().then(function(socket) {
-                    socket.json.send(data);
+                    socket.send(data);
                 })
             } else {
                 this.setSyncState(false);
@@ -798,7 +783,154 @@ define([
          *  Bind sync with editor
          */
         bindEditor: function(editor) {
-            var that = this;
+            var sync = this;
+
+            // Lock on editor changemen
+            sync._op_set = false;
+
+            sync.on("update:env", function(options) {
+                if (options.reset) {
+                    sync._op_set = true;
+                    editor.setContent("");
+                    sync._op_set = false;
+                }
+            });
+
+            // Bind cursor and selection changement -> backend
+            sync.listenTo(editor, "selection:change", function(selection) {
+                sync.updateUserSelection(selection.start.column, selection.start.row, selection.end.column, selection.end.row);
+            });
+            sync.listenTo(editor, "cursor:change", function(cursor) {
+                sync.updateUserCursor(cursor.column, cursor.row);
+            });
+
+            // Bind content changement -> backend
+            sync.listenTo(editor, "content:change", function() {
+                if (sync._op_set) return;
+                sync.updateContent(editor.getContent());
+            });
+
+            // Bind changement from backend -> editor
+            sync.on("content", function(content, oldcontent, patches) {
+                var selection, cursor_lead, cursor_anchor, scroll_y, operations;
+
+                // if resync patches is null
+                patches = patches || [];
+
+                // Calcul operaitons from patch
+                operations = sync.patchesToOps(patches);
+
+                // Do some operations on selection to preserve selection
+                selection = editor.getSelection();
+
+                scroll_y = editor.getScrollTop();
+
+                cursor_lead = selection.start;
+                cursor_lead = sync.cursorApplyOps({
+                    x: cursor_lead.column,
+                    y: cursor_lead.row
+                }, operations, oldcontent);
+
+                cursor_anchor = selection.end;
+                cursor_anchor = sync.cursorApplyOps({
+                    x: cursor_anchor.column,
+                    y: cursor_anchor.row
+                }, operations, oldcontent);
+
+                // Set editor content
+                sync._op_set = true;
+
+                // Apply ace delta all in once
+                editor.applyDocDeltas(
+                    _.map(operations, function(op) {
+                        return {
+                            action: op.type+"Text",
+                            range: {
+                                start: editor.posFromIndex(op.index),
+                                end: editor.posFromIndex(op.index + op.content.length)
+                            },
+                            text: op.content
+                        }
+                    })
+                );
+
+                // Check document content is as expected
+                if (editor.getDocContent() != content) {
+                    logging.error("Invalid operation ", content, editor.getDocContent());
+                    editor.setDocContent(content);
+                    sync.sendSync();
+                }
+                sync._op_set = false;
+
+                // Move cursors
+                editor.setScrollTop(scroll_y);
+
+                cursor_anchor = sync.cursorPosByindex(cursor_anchor, content);
+                editor.setSelection({
+                    row: cursor_anchor.y,
+                    column: cursor_anchor.x
+                });
+
+                cursor_lead = sync.cursorPosByindex(cursor_lead, content);
+                editor.setSelection(null, {
+                    row: cursor_lead.y,
+                    column: cursor_lead.x
+                })
+            }, this);
+
+            // Participant cursor moves
+            sync.on("cursor:move", function(cId, c) {
+                editor.moveCursorExt(cId, c);
+            });
+
+            // Participant selection
+            sync.on("selection:move", function(cId, c) {
+                editor.moveSelectionExt(cId, c);
+            });
+
+            // Remove a cursor/selection
+            sync.on("cursor:remove selection:remove", function(cId) {
+                editor.removeSelectionExt(cId);
+                editor.removeCursorExt(cId);
+            });
+
+            // Participants list change
+            sync.on("participants", function() {
+                console.log("sync participants", sync.participants);
+            });
+
+            // Bind sync state changement
+            sync.on("sync:state", function(state) {
+                editor.setReadOnly(!state);
+                if (!state) {
+                    editor.tab.setTabState("warning", true);
+                } else {
+                    editor.tab.setTabState("warning", false);
+                }
+            });
+
+            // Clsoe tab when sync is over
+            sync.on("close", function(mode) {
+                editor.tab.closeTab();
+            });
+
+            // handle error
+            sync.on("error", function(err) {
+                codebox.statusbar.show("Error: "+(err.message || err), 3000);
+            });
+
+            // Tab states
+            sync.on("sync:modified", function(state) {
+                editor.tab.setTabState("modified", state);
+            });
+
+            sync.on("sync:loading", function(state) {
+                editor.tab.setTabState("loading", state);
+            });
+
+            // Start sync
+            logging.log("start sync with file", editor.model);
+            sync.setFile(editor.model);
         }
     });
 
