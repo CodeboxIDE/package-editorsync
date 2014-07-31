@@ -3,6 +3,7 @@ define([
 ], function(FileSync) {
     var commands = codebox.require("core/commands");
     var File = codebox.require("models/file");
+    var dialogs = codebox.require("utils/dialogs");
 
     commands.register({
         id: "editor.collaboration.toggle",
@@ -17,7 +18,8 @@ define([
             }
 
             editor.sync = new FileSync();
-            editor.sync.bindEditor(editor);
+            editor.sync.bindEditor(editor)
+            .fail(dialogs.error);
         }
     });
 });

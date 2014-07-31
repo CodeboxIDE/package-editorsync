@@ -265,30 +265,41 @@ define([
         },
 
         /*
-         *  Update synchronization environement
+         *  Set file for the synschronization
          */
-        updateEnv: function(envId, options) {
+        setFile: function(file, options) {
             var self = this;
+
+            options = _.defaults({}, options || {}, {
+                sync: true,
+                reset: true,
+                autoload: true
+            });
+            options.reset = options.sync? false : options.reset;
+
+            if (!file) return Q.reject("Invalid editor session to start synchronization");
+            if (file.isBuffer()) return Q.reject("Can't start synchronization on a temporary buffer");
+
+            logging.log("init file with options ", options);
+
+            this.file = file;
+
+            this.file.on("set", _.partial(this.setFile, this.file, options), this);
+            this.file.on("modified", this.trigger.bind(this, "sync:modified"));
+            this.file.on("loading", this.trigger.bind(this, "sync:loading"));
+
+            if (options.autoload) {
+                this.on("file:path", function(path) {
+                    this.file.stat(path);
+                }, this);
+            }
 
             // Send close to previous session
             this.send("close");
 
-            if (_.isObject(envId)) {
-                options = envId;
-                envId = this.envId;
-            }
-
-            options = _.defaults({}, options || {}, {
-                sync: false,
-                reset: false
-            });
-
-            options.reset = options.sync? false : options.reset;
-
+            // Environment session
             this.envOptions = options
-            this.envId = envId;
-
-            logging.log("update env with", this.envId, options);
+            this.envId = this.file.get("path");
 
             this.content_value_t0 = this.content_value_t0 || "";
             this.content_value_t1 = this.content_value_t1 || "";
@@ -307,7 +318,8 @@ define([
             this.setParticipants([]);
 
             logging.log("connecting to the backend");
-            this.socket().then(function(socket) {
+            return this.socket()
+            .then(function(socket) {
                 logging.log("connected");
 
                 socket.on('close', function() {
@@ -375,40 +387,6 @@ define([
         },
 
         /*
-         *  Set file for the synschronization
-         */
-        setFile: function(file, options) {
-            options = _.defaults({}, options || {}, {
-                sync: true,
-                reset: true,
-                autoload: true
-            });
-
-            if (file.isBuffer()) {
-                logging.error("can't do sync on buffer file", file);
-                return;
-            }
-
-            logging.log("init file with options ", options);
-
-            this.file = file;
-
-            if (this.file != null) {
-                this.file.on("set", _.partial(this.setFile, this.file, options), this);
-                this.file.on("modified", this.trigger.bind(this, "sync:modified"));
-                this.file.on("loading", this.trigger.bind(this, "sync:loading"));
-
-                if (options.autoload) {
-                    this.on("file:path", function(path) {
-                        this.file.stat(path);
-                    }, this);
-                }
-
-                this.updateEnv(this.file.get("path"), options);
-            }
-        },
-
-        /*
          *  Return a socket for this connexion
          */
         socket: function() {
@@ -417,8 +395,7 @@ define([
             if (this._socket) return Q(this._socket);
 
             if (!this.envId) {
-                logging.error("no envId when creating socket");
-                return Q.reject(new Error("need 'envId' to create sync socket"))
+                return Q.reject(new Error("Need 'envId' to create synchronization socket"))
             }
 
             var s = new Socket({
@@ -430,7 +407,7 @@ define([
                 d.resolve(that._socket);
             });
 
-            return d.promise.timeout(5000, "Timeout when connecting to sync backend");
+            return d.promise.timeout(5000, "Timeout when connecting to synchronization backend");
         },
 
         /*
@@ -941,7 +918,12 @@ define([
             // Start sync
             logging.log("start sync with file", editor.model);
 
-            return sync.setFile(editor.model);
+            return sync.setFile(editor.model)
+            .fail(function(err) {
+                message.destroy();
+
+                return Q.reject(err);
+            });
         }
     });
 
