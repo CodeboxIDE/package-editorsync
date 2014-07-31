@@ -799,6 +799,11 @@ define([
                 }
             });
 
+            // Add message
+            var message = editor.statusbar.add({
+                'content': "Preparing synchronization..."
+            });
+
             // Bind cursor and selection changement -> backend
             sync.listenTo(editor, "selection:change", function(selection) {
                 sync.updateUserSelection(selection.start.column, selection.start.row, selection.end.column, selection.end.row);
@@ -904,13 +909,12 @@ define([
 
             // Bind sync state changement
             sync.on("sync:state", function(state) {
-                console.log("sync state", state);
-                /*editor.setReadOnly(!state);
-                if (!state) {
-                    editor.tab.setTabState("warning", true);
+                editor.setReadOnly(!state);
+                if (state) {
+                    message.set("content", "Sync is ok");
                 } else {
-                    editor.tab.setTabState("warning", false);
-                }*/
+                    message.set("content", "Problem with synchronization");
+                }
             });
 
             // Clsoe tab when sync is over
