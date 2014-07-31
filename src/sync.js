@@ -79,6 +79,11 @@ define([
             }
         },
 
+        // Chnage modified state
+        updateModifiedState: function(s) {
+            this.trigger("sync:modified", s);
+        },
+
         // Update current user cursor
         updateUserCursor: function(x, y) {
             if (!this.isSync()) return this;
@@ -117,7 +122,7 @@ define([
             this.timeOfLastLocalChange = Date.now();
             this.sendPatch(patch_text, this.hash_value_t0, this.hash_value_t1);
 
-            //this.file.modifiedState(true);
+            this.updateModifiedState(true);
         },
 
 
@@ -285,8 +290,6 @@ define([
             this.file = file;
 
             this.file.on("set", _.partial(this.setFile, this.file, options), this);
-            this.file.on("modified", this.trigger.bind(this, "sync:modified"));
-            this.file.on("loading", this.trigger.bind(this, "sync:loading"));
 
             if (options.autoload) {
                 this.on("file:path", function(path) {
@@ -367,7 +370,7 @@ define([
                                 self.setParticipants(data.participants)
                             }
                             if (data.state != null) {
-                                //self.file.modifiedState(data.state);
+                                self.updateModifiedState(data.state);
                             }
                             break;
                         case "patch":
@@ -375,7 +378,7 @@ define([
                             break;
                         case "modified":
                             if (data.state != null) {
-                                //self.file.modifiedState(data.state);
+                                self.updateModifiedState(data.state);
                             }
                             break;
                     }
@@ -796,6 +799,11 @@ define([
                 sync.updateContent(editor.getContent());
             });
 
+            // Bind closing of tab/file
+            sync.listenTo(editor, "tab:close", function() {
+                sync.close();
+            });
+
             // Bind changement from backend -> editor
             sync.on("content", function(content, oldcontent, patches) {
                 var selection, cursor_lead, cursor_anchor, scroll_y, operations;
@@ -842,7 +850,7 @@ define([
 
                 // Check document content is as expected
                 if (editor.getDocContent() != content) {
-                    logging.error("Invalid operation ", content, editor.getDocContent());
+                    logging.error("Invalid operation ", content.length, editor.getDocContent().length);
                     editor.setDocContent(content);
                     sync.sendSync();
                 }
@@ -889,7 +897,7 @@ define([
             sync.on("sync:state", function(state) {
                 editor.setReadOnly(!state);
                 if (state) {
-                    message.set("content", "Sync is ok");
+                    message.set("content", "Synchronization is ok");
                 } else {
                     message.set("content", "Problem with synchronization");
                 }
@@ -908,11 +916,7 @@ define([
 
             // Tab states
             sync.on("sync:modified", function(state) {
-                editor.tab.setTabState("modified", state);
-            });
-
-            sync.on("sync:loading", function(state) {
-                editor.tab.setTabState("loading", state);
+                editor.setTabState("modified", state);
             });
 
             // Start sync
