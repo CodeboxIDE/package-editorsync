@@ -919,6 +919,7 @@ define([
 
             // Clsoe tab when sync is over
             sync.on("close", function(mode) {
+                message.destroy();
                 editor.tab.closeTab();
             });
 
