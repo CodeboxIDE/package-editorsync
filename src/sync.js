@@ -6,6 +6,8 @@ define([
     var Q = codebox.require("hr/promise");
     var hash = codebox.require("utils/hash");
     var Socket = codebox.require("core/socket");
+    var collaborators = codebox.require("core/users");
+    var user = codebox.require("core/user");
     var logging = hr.Logger.addNamespace("filesync");
 
     // hash method for patch
@@ -100,6 +102,7 @@ define([
             this.hash_value_t0 = this.hash_value_t1;
 
             // New content hash
+            logging.log("update content", value);
             this.content_value_t1 = value;
             this.hash_value_t1 = _hash(this.content_value_t1);
 
@@ -114,7 +117,7 @@ define([
             this.timeOfLastLocalChange = Date.now();
             this.sendPatch(patch_text, this.hash_value_t0, this.hash_value_t1);
 
-            this.file.modifiedState(true);
+            //this.file.modifiedState(true);
         },
 
 
@@ -329,12 +332,12 @@ define([
 
                     switch (data.action) {
                         case "cursor":
-                            if (data.from != user.get("userId")) {
+                            if (data.from != user.get("id")) {
                                 self.cursorMove(data.from, data.cursor.x, data.cursor.y);
                             }
                             break;
                         case "select":
-                            if (data.from != user.get("userId")) {
+                            if (data.from != user.get("id")) {
                                 self.selectionMove(data.from, data.start.x, data.start.y, data.end.x, data.end.y);
                             }
                             break;
@@ -352,7 +355,7 @@ define([
                                 self.setParticipants(data.participants)
                             }
                             if (data.state != null) {
-                                self.file.modifiedState(data.state);
+                                //self.file.modifiedState(data.state);
                             }
                             break;
                         case "patch":
@@ -360,7 +363,7 @@ define([
                             break;
                         case "modified":
                             if (data.state != null) {
-                                self.file.modifiedState(data.state);
+                                //self.file.modifiedState(data.state);
                             }
                             break;
                     }
@@ -456,7 +459,7 @@ define([
          *  @y : position y of the cursor (line)
          */
         cursorMove: function(id, x, y) {
-            if (user.get("userId") == id) {
+            if (user.get("id") == id) {
                 return this;
             }
 
@@ -478,7 +481,7 @@ define([
          *  @ey : position end y of the selection (line)
          */
         selectionMove: function(id, sx, sy, ex, ey) {
-            if (user.get("userId") == id) {
+            if (user.get("id") == id) {
                 return this;
             }
 
@@ -590,7 +593,7 @@ define([
             // Update participants list
             this.participants = _.chain(participants)
             .map(function(participant, i) {
-                participant.user = collaborators.getById(participant.userId);
+                participant.user = collaborators.get(participant.userId);
                 if (!participant.user) {
                     logging.error("participant non user:", participant.userId);
                     return null;
@@ -658,8 +661,8 @@ define([
             if (this.envId != null && action != null) {
                 data = _.extend({}, data || {}, {
                     'action': action,
-                    'from': "samy", //user.get("userId"),
-                    'token': "test", //user.get("token"),
+                    'from': user.get("id"),
+                    'token': user.get("token"),
                     'environment': this.envId
                 });
 
@@ -773,7 +776,7 @@ define([
          */
         close: function() {
             clearInterval(this.timer);
-            this.file.modifiedState(false);
+            //this.file.modifiedState(false);
             this.send("close");
             this.closeSocket();
             this.off();
@@ -785,7 +788,7 @@ define([
         bindEditor: function(editor) {
             var sync = this;
 
-            // Lock on editor changemen
+            // Lock on editor changement
             sync._op_set = false;
 
             sync.on("update:env", function(options) {
@@ -901,12 +904,13 @@ define([
 
             // Bind sync state changement
             sync.on("sync:state", function(state) {
-                editor.setReadOnly(!state);
+                console.log("sync state", state);
+                /*editor.setReadOnly(!state);
                 if (!state) {
                     editor.tab.setTabState("warning", true);
                 } else {
                     editor.tab.setTabState("warning", false);
-                }
+                }*/
             });
 
             // Clsoe tab when sync is over
