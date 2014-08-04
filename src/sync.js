@@ -17,17 +17,7 @@ define([
 
     var FileSync = hr.Class.extend({
         defaults: {
-            'file': null,
-            'colors': [
-                "#1abc9c",
-                "#9b59b6",
-                "#e67e22",
-                "#16a085",
-                "#c0392b",
-                "#2980b9",
-                "#f39c12",
-                "#8e44ad"
-            ]
+            'file': null
         },
 
         // Constructor
@@ -579,9 +569,6 @@ define([
                     return null;
                 }
 
-                // Color for this participant
-                participant.color = this.options.colors[i % this.options.colors.length];
-
                 return participant;
             }, this)
             .compact()
@@ -624,7 +611,7 @@ define([
         participantColor: function(pid) {
             return _.reduce(this.participants, function(color, participant) {
                 if (participant.userId == pid) {
-                    return participant.color;
+                    return participant.user.get("color");
                 }
                 return color;
             }, "#ff0000");
