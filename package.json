@@ -2,8 +2,8 @@
     "name": "editorsync",
     "version": "0.0.0",
     "description": "Realtime collaboration inside the code editor",
-    "main": "src/index",
-    "node": "lib/main",
+    "browser": "./src/index.js",
+    "main": "./lib/index.js",
     "engines": {
         "codebox": ">=1.0.0"
     },
