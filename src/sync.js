@@ -1,6 +1,6 @@
 var diff_match_patch = require("googlediff");
 
-
+var _ = codebox.require("hr.utils");
 var Class = codebox.require("hr.class");
 var Queue = codebox.require("hr.queue");
 var Q = codebox.require("q");
@@ -8,7 +8,7 @@ var hash = codebox.require("utils/hash");
 var Socket = codebox.require("core/socket");
 var collaborators = codebox.require("core/users");
 var user = codebox.require("core/user");
-var logging = require("hr.logger")("filesync");
+var logging = codebox.require("hr.logger")("filesync");
 
 // hash method for patch
 var _hash = function(s) {
