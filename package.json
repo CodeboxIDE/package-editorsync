@@ -5,7 +5,7 @@
     "browser": "./src/index.js",
     "main": "./lib/index.js",
     "engines": {
-        "codebox": ">=1.0.0"
+        "codebox": ">=1.0.0-alpha"
     },
     "packageDependencies": {
         "editor": "CodeboxIDE/package-editor"
